@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="theme-color" content="#153c32" />
+  <title>Sombra Madrid — real shade-aware walking routes</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="#"><span class="moon">◒</span>Sombra</a>
+    <div class="pilot-badge"><i></i> Live Madrid pilot · 5 km</div>
+    <button id="about-button" class="text-button">How it works</button>
+  </header>
+
+  <div id="protocol-warning" class="protocol-warning" hidden>
+    <strong>Open this over HTTP, not as a file.</strong>
+    <span>Browsers block <code>file://</code> pages from calling live data services, so address search, streets, building heights and weather will fail. From this folder run <code>python3 -m http.server 8080</code> (or <code>ruby -run -e httpd . -p 8080</code>) and open <b>http://127.0.0.1:8080</b>.</span>
+  </div>
+
+  <main class="workspace">
+    <aside class="panel">
+      <div class="panel-intro">
+        <span class="eyebrow">REAL STREET + BUILDING DATA</span>
+        <h1>Walk on the<br><em>cooler</em> side.</h1>
+        <p>Compare the fastest route with a route shaped by where Madrid’s buildings cast shade.</p>
+      </div>
+
+      <form id="route-form" autocomplete="off">
+        <section class="control-card endpoints">
+          <div class="endpoint-row">
+            <span class="point start"></span>
+            <label for="origin-input"><small>START</small><input id="origin-input" value="IE Business School · María de Molina 31" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="origin-results" placeholder="Search a street, place or address" /></label>
+            <button type="button" class="map-pick" data-pick="origin" title="Choose start on map" aria-label="Choose start on map">⌖</button>
+            <div id="origin-results" class="search-results" role="listbox" hidden></div>
+          </div>
+          <div class="endpoint-line"></div>
+          <button type="button" id="swap" class="swap" title="Swap points">⇅</button>
+          <div class="endpoint-row">
+            <span class="point end"></span>
+            <label for="destination-input"><small>DESTINATION</small><input id="destination-input" value="Plaza de Colón, Madrid" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="destination-results" placeholder="Search a street, place or address" /></label>
+            <button type="button" class="map-pick" data-pick="destination" title="Choose destination on map" aria-label="Choose destination on map">⌖</button>
+            <div id="destination-results" class="search-results" role="listbox" hidden></div>
+          </div>
+        </section>
+
+        <button id="tracking-button" class="tracking-button" type="button">
+          <span class="tracking-symbol">◎</span>
+          <span><strong>Use my live location</strong><small id="tracking-status">Off · updates as you move</small></span>
+          <i></i>
+        </button>
+
+        <section class="control-card timing">
+          <div class="section-label"><span>DEPARTURE</span><strong id="time-label">15:30</strong></div>
+          <div class="date-time-row">
+            <input id="date-input" type="date" />
+            <span id="sun-state" class="sun-state">☀ Daylight</span>
+          </div>
+          <input id="time-input" type="range" min="420" max="1260" value="930" step="15" />
+          <div class="range-labels"><span>07:00</span><span>solar noon</span><span>21:00</span></div>
+        </section>
+
+        <section id="weather-card" class="control-card weather-card">
+          <div class="weather-main"><span id="weather-icon">☀</span><div><strong id="weather-temp">Loading…</strong><small id="weather-description">Departure weather near the route</small></div></div>
+          <div class="weather-details"><span><small>FEELS</small><b id="weather-feels">—</b></span><span><small>CLOUD</small><b id="weather-cloud">—</b></span><span><small>SUN</small><b id="weather-radiation">—</b></span></div>
+        </section>
+
+        <section class="control-card preference">
+          <div class="section-label"><span>SHADE PRIORITY</span><strong id="priority-label">Balanced</strong></div>
+          <input id="priority-input" type="range" min="1" max="5" value="3" step="1" />
+          <div class="range-labels"><span>Shorter</span><span>Cooler</span></div>
+        </section>
+
+        <div id="form-error" class="form-error" hidden></div>
+        <button id="calculate" class="primary" type="submit"><span>Calculate real routes</span><b>→</b></button>
+      </form>
+
+      <div class="data-note">
+        <span class="data-icon">◎</span>
+        <p><strong>Live public data</strong><br>Walking streets from OpenStreetMap. Building heights from Madrid City Council, with OpenStreetMap heights as a fallback.</p>
+      </div>
+    </aside>
+
+    <section class="map-area">
+      <div id="map"></div>
+      <div class="map-topbar">
+        <div class="campus-chip"><span>IE</span><div><small>PILOT CENTRE</small><strong>María de Molina 31</strong></div></div>
+        <div class="map-actions"><button id="follow-location" class="map-button" title="Follow live location">◎</button><button id="reset-view" class="map-button" title="Show the 5 km pilot area">⌂</button></div>
+      </div>
+      <div class="map-hint" id="map-hint">Choose a map-pin button, then click the map</div>
+      <div class="legend">
+        <div><i class="line sunny"></i>Sun on the street</div>
+        <div><i class="line mixed"></i>Partly shaded</div>
+        <div><i class="line shaded"></i>Building shade</div>
+        <div><i class="line fastest"></i>Other route</div>
+      </div>
+
+      <div id="loading" class="loading" hidden>
+        <div class="spinner"></div>
+        <strong id="loading-title">Loading Madrid streets…</strong>
+        <span id="loading-detail">This can take 10–30 seconds on the public data services.</span>
+        <div class="loading-track"><i id="loading-progress"></i></div>
+      </div>
+
+      <div id="result-sheet" class="result-sheet" hidden>
+        <div class="sheet-head">
+          <div><span class="eyebrow">ROUTE COMPARISON</span><h2 id="result-title">A cooler walk through Madrid</h2></div>
+          <button id="close-results" aria-label="Close results">×</button>
+        </div>
+        <div id="route-options" class="route-options"></div>
+        <div class="calculation-summary">
+          <span id="building-count">— buildings analysed</span>
+          <span id="solar-summary">— sun altitude</span>
+          <span id="result-weather">— weather</span>
+          <span id="calculation-quality" class="quality">Measured heights</span>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <dialog id="about-dialog">
+    <button id="close-about" aria-label="Close">×</button>
+    <span class="eyebrow">HOW SOMBRA CALCULATES A ROUTE</span>
+    <h2>Street by street, shadow by shadow.</h2>
+    <ol>
+      <li><b>1</b><div><strong>Load the walkable network</strong><p>Pedestrian-accessible OpenStreetMap streets are converted into a local routing graph.</p></div></li>
+      <li><b>2</b><div><strong>Read real building heights</strong><p>Official Madrid footprints and metre heights are loaded for the route corridor. If that service is unreachable, OpenStreetMap heights are used instead and the result is labelled as estimated.</p></div></li>
+      <li><b>3</b><div><strong>Project the sun</strong><p>Solar altitude and bearing are calculated for the chosen date and Madrid time. Every footprint is projected away from the sun according to its height.</p></div></li>
+      <li><b>4</b><div><strong>Score every street</strong><p>Sample points along each street segment estimate its shaded percentage. Dijkstra’s algorithm then balances distance against sun exposure, and the drawn route is coloured yellow where the sun hits and brown where a building shades it.</p></div></li>
+    </ol>
+    <p class="warning"><strong>Pilot limitation:</strong> shadows are geometric estimates. Trees, awnings, clouds, construction and temporary closures are not yet modelled. Always follow real street signs.</p>
+  </dialog>
+
+  <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    // If the primary CDN is blocked, pull Leaflet from a mirror before app.js runs.
+    if (typeof L === "undefined") {
+      document.write('<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"><\/script>');
+      document.write('<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />');
+    }
+  </script>
+  <script src="app.js"></script>
+</body>
+</html>
